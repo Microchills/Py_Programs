@@ -7,6 +7,8 @@ import time
 import json
 import re
 import pandas as pd
+import threading
+import multiprocessing
 
 # scrape page and print log and error messages
 def scrape_page(url,page,params=''):
@@ -66,11 +68,11 @@ async def scrape_infoPage(url,dataList):
                         job_location,com_name,com_desc,dataList)
 
 # scrape page of intern job list
-def scrape_listPage(page):
+def scrape_listPage(page,keyword):
     url = 'https://www.shixiseng.com/interns'
     params = {
         'page': 'page',
-        'keyword': '证券',
+        'keyword': keyword,
         'city': '上海'
         }
     html = scrape_page(url,page,params)
@@ -83,29 +85,48 @@ def scrape_listPage(page):
         return urlList
 
     
-def main():
+def scrapeBykey(keyword):
     start = time.time()
     #scrape the first page
     page = 1
-    urlList,last_page = scrape_listPage(page)
+    urlList,last_page = scrape_listPage(page,keyword)
     #while the number of page is more than 1,continue scraping
     while (page < last_page ):
         page += 1
-        urlList.extend(scrape_listPage(page))
+        urlList.extend(scrape_listPage(page,keyword))
     print("Scraping detailed information...")
+    ScrapeList = time.time()
     dataList = []
+    # new_loop = asyncio.new_event_loop()
+    # asyncio.set_event_loop(new_loop)
     loop = asyncio.get_event_loop()
     tasks = [asyncio.ensure_future(scrape_infoPage(url,dataList)) for url in urlList]
     loop.run_until_complete(asyncio.wait(tasks))
     #save data to jobData.csv
     df = pd.DataFrame(dataList)
     df.index += 1
-    df.to_csv("jobData.csv",encoding="utf-8-sig")
+    df.to_csv("{0}_{1}.csv".format(keyword,"实习数据"),encoding="utf-8-sig")
     # with open('jobData_test.json', 'a+',encoding='utf-8') as f:
     #    f.write(json.dumps(dataList,indent=4,ensure_ascii=False))
     end = time.time()
     print("Number of data scraped: ",len(urlList))
-    print("Cost time: ", end - start)
+    print("Scrape List time: ", end-ScrapeList)
+    print("Total time: ", end - start)
+
+def main():
+    # scrapeBykey('投资')
+    # scrapeBykey('基金')
+    # threading.Thread(target=scrapeBykey, args=("投资",)).start()
+    # threading.Thread(target=scrapeBykey, args=("基金",)).start()
+    # threading.Thread(target=scrapeBykey, args=("证券",)).start()
+    key_list = ['投资','基金','证券','金融']
+    process_list = []
+    for key in key_list:
+        p = multiprocessing.Process(target=scrapeBykey,args=(key,))
+        p.start()
+        process_list.append(p)
+    for p in process_list:
+        p.join()
 
 if __name__ == '__main__':
     main()
